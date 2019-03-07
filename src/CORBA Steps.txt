@@ -1,0 +1,107 @@
+Steps:
+
+1) First check that idlj compiler is installed or not(type idlj -h in command prompt).
+if you do not have then install java 10 or lesser version.
+
+2) Now that we have idlj compiler we need a file to compile,
+Create a .idl file.(A CORBA interface).
+Ex.
+module App{
+interface AppInt{
+//other methods.
+oneway shutdown();
+}
+}
+
+3) Compile the .idl file.
+Open cmd(Command prompt) > change the directory to where the .idl file is.
+type idlj -fall fileName.idl
+
+--It will generate a package(folder) with 6 .java files. Look them to get the flow.--
+
+4) Create a class to implement all the server methods.
+Create a class and extend it to the [fileName]POA.java file from the package.
+Implement all the methods.
+In this class declare and initialize a private data member of type ORB.
+Ex.
+private ORB orb;
+and provide a setter method for it.
+
+5) Create a ServerDriver class.
+write main method and write following.
+/*Write everything in a try catch.*/
+
+/*this is common for all server objects*/
+ORB orb = ORB.init(args, null);
+POA rootpoa = POAHelper.narrow(orb.resolve_initial_references("RootPOA"));
+rootpoa.the_POAManager().activate();
+
+
+Create as many server object as you want.
+
+set the ORB object with created servers with setter method defined previously.
+
+/*Create a reference for all the servers as follows*/
+
+org.omg.CORBA.Object AppIntRef = rootpoa.servant_to_reference(serverObj);
+
+/*create a hyper reference for all the servers as follows*/
+
+AppInt AppIntHRef = AppIntHelper.narrow(AppIntRef);
+
+/*this is common for all server objects*/
+Object objRef =  orb.resolve_initial_references("NameService");
+NamingContextExt ncRef = NamingContextExtHelper.narrow(objRef);
+
+
+/*create name paths and bind all the server objects.*/
+for each server object write following,
+
+NameComponent[] objPath = ncRef.to_name("Name");
+ncRef.rebind(objPath, AppIntHref);
+
+at the end add a true while loop for constantly listening client request.
+while(true){orb.run();}
+
+6) To run the server on a port we need to pass arguments to main function of ServerDriver class
+---IntelliJ---
+Go to Run > Edit Configuration > select the ServerDriver class from left pane,
+At the program argument section write following,
+-ORBInitialPort 1304 -ORBInitialHost localhost
+
+------We are done with Server configuration------
+/**To test server
+*  open a command prompt
+*  Type:
+*  start orbd -ORBInitialPort 1304
+*  And Run the ServerDriver class.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
