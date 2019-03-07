@@ -25,6 +25,13 @@ public class ServerDriver {
             mcgill.setOrb(orb);
             montreal.setOrb(orb);
 
+            Thread concordiaDelegate = new Thread(new Delegate(1301,concordia));
+            concordiaDelegate.start();
+            Thread mcgillDelegate = new Thread(new Delegate(1302,mcgill));
+            mcgillDelegate.start();
+            Thread montrealDelegate = new Thread(new Delegate(1303,montreal));
+            montrealDelegate.start();
+
             // get object reference from the servant
             Object concordiaRef = rootpoa.servant_to_reference(concordia);
             Object mcgillRef = rootpoa.servant_to_reference(mcgill);
