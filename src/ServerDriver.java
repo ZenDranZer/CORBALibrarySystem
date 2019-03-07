@@ -8,7 +8,7 @@ import org.omg.CosNaming.NamingContextExtHelper;
 import org.omg.PortableServer.POA;
 import org.omg.PortableServer.POAHelper;
 
-
+/**Server Driver to initialize the server objects and delegate UDP servers*/
 public class ServerDriver {
     public static void main(String[] args) {
         try{
