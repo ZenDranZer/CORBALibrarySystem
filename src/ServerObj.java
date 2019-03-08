@@ -41,7 +41,7 @@ public class ServerObj extends ServerFeaturesPOA {
     protected final HashMap<String,Manager> manager;
     protected final HashMap<String,Item> item;
     protected final HashMap<User,HashMap<Item,Integer>> borrow;
-    protected final HashMap<Item, HashMap<User,Integer>> waitingQueue;
+    protected final HashMap<String, HashMap<String,Integer>> waitingQueue;      //itemID<userID,Integer>
     protected final HashMap<String,Integer> borrowedItemDays;
     protected String library;
     private Integer next_User_ID;
@@ -96,7 +96,7 @@ public class ServerObj extends ServerFeaturesPOA {
         String initItemID1001 = library + 1001;
         String initItemID1002 = library + 1002;
         String initItemID1003 = library + 1003;
-        Item initItem1001 = new Item(initItemID1001,"Distributed Systems",5);
+        Item initItem1001 = new Item(initItemID1001,"Distributed Systems",1);
         Item initItem1002 = new Item(initItemID1002,"Parallel Programming",6);
         Item initItem1003 = new Item(initItemID1003,"Algorithm Designs",7);
         item.put(initItemID1001,initItem1001);
@@ -205,7 +205,7 @@ public class ServerObj extends ServerFeaturesPOA {
                         borrow.get(currentUser).remove(pair.getKey());
                         borrowedItemDays.remove(itemID);
                     }
-                    updateItemCount(itemID);
+                    increamentItemCount(itemID);
                     automaticAssignmentOfBooks(itemID);
                     message += " Successful";
                     writeToLogFile(message);
@@ -234,7 +234,6 @@ public class ServerObj extends ServerFeaturesPOA {
         Item requestedItem;
         requestedItem = item.get(itemID);
         if(requestedItem.getItemCount() == 0){
-
             return "queue";
         }else {
             HashMap<Item,Integer> entry;
@@ -244,15 +243,8 @@ public class ServerObj extends ServerFeaturesPOA {
                             "\n Status : Unsuccessful";
                     return reply;
                 } else {
-                    requestedItem.setItemCount(requestedItem.getItemCount() - 1);
-                    synchronized (lock) {
-                        item.remove(itemID);
-                        item.put(itemID, requestedItem);
-                    }
                     entry = borrow.get(currentUser);
-                    synchronized (lock){
-                        borrow.remove(currentUser);
-                    }
+                    synchronized (lock){ borrow.remove(currentUser);}
                 }
             } else {
                 entry = new HashMap<>();
@@ -261,6 +253,7 @@ public class ServerObj extends ServerFeaturesPOA {
             synchronized (lock) {
                 borrow.put(currentUser, entry);
             }
+            decrementItemCount(itemID);
             reply += "\n Status : Successful";
             borrowedItemDays.put(itemID,numberOfDays);
             writeToLogFile(reply);
@@ -418,23 +411,14 @@ public class ServerObj extends ServerFeaturesPOA {
     /**It adds the given userID to the waiting list for given itemID with numberOfDays.*/
     @Override
     public String addToQueue(String userID, String itemID, int numberOfDays) {
-        Item currentItem = item.get(itemID);
-        User currentUser = user.get(userID);
-        HashMap<User,Integer> waitingUsers = new HashMap<>();
-        if(!waitingQueue.containsKey(currentItem)){
-            synchronized (lock) {waitingQueue.put(currentItem,waitingUsers);}
+        if(waitingQueue.containsKey(itemID)){
+            waitingQueue.get(itemID).put(userID,numberOfDays);
+        }else{
+            HashMap<String,Integer> userList = new HashMap<>();
+            userList.put(userID,numberOfDays);
+            waitingQueue.put(itemID,userList);
         }
-        synchronized (lock) {waitingUsers = waitingQueue.get(currentItem);
-            waitingUsers.put(currentUser,numberOfDays);
-            waitingUsers.remove(currentUser);
-            waitingQueue.put(currentItem,waitingUsers);}
-        String message =
-                "Add to Queue Request : Server : " + library +
-                        " User ID :" + userID +
-                        " Item ID : "+ itemID +
-                        " Status : Successful.";
-        writeToLogFile(message);
-        return  message;
+        return "Add to queue : User ID : "+ userID + " Item ID : " + itemID;
     }
 
     @Override
@@ -709,9 +693,16 @@ public class ServerObj extends ServerFeaturesPOA {
     }
 
     /**it increases the item count by 1.*/
-    protected synchronized void updateItemCount(String itemID){
+    protected synchronized void increamentItemCount(String itemID){
         Item currentItem = item.get(itemID);
         currentItem.setItemCount(currentItem.getItemCount()+1);
+        item.remove(itemID);
+        item.put(itemID,currentItem);
+    }
+
+    protected synchronized void decrementItemCount(String itemID){
+        Item currentItem = item.get(itemID);
+        currentItem.setItemCount(currentItem.getItemCount()-1);
         item.remove(itemID);
         item.put(itemID,currentItem);
     }
@@ -738,28 +729,14 @@ public class ServerObj extends ServerFeaturesPOA {
      * automatically assign the item to the first user and send
      * a message to the user.*/
     protected void automaticAssignmentOfBooks(String itemID) {
-        Item currentItem = item.get(itemID);
-        if(waitingQueue.containsKey(currentItem)){
-            HashMap<User,Integer> userList;
-            Iterator<Map.Entry<User,Integer>> iterator;
-            synchronized (lock) {
-                userList = waitingQueue.get(currentItem);
-                iterator = userList.entrySet().iterator();
-            }
+        if(waitingQueue.containsKey(itemID)){
+            HashMap<String,Integer> userList = waitingQueue.get(itemID);
+            Iterator<Map.Entry<String,Integer>> iterator = userList.entrySet().iterator();
             if(iterator.hasNext()){
-                Map.Entry<User,Integer> pair = iterator.next();
-                User currentUser =  pair.getKey();
-                HashMap<Item,Integer> borrowedItems;
-                if(!borrow.containsKey(currentUser)){
-                    borrowedItems = new HashMap<>();
-                }else{
-                    borrowedItems = borrow.get(currentUser);
-                    synchronized (lock) {borrow.remove(currentUser);}
-                }
-                borrowedItems.put(currentItem,pair.getValue());
-                borrowedItemDays.put(itemID,pair.getValue());
-                synchronized (lock) {borrow.put(currentUser,borrowedItems);}
-                String message = "Borrow Request Status : Successful UserID : " + currentUser.getUserID() +" ItemID : " + itemID;
+                Map.Entry<String, Integer> pair = iterator.next();
+                String message = borrowItem(pair.getKey(),itemID,pair.getValue());
+                if(message.substring(message.length()-10).equals("Successful"))
+                    waitingQueue.get(itemID).remove(pair.getKey());
                 writeToLogFile(message);
             }
         }
