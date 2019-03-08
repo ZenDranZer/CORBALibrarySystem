@@ -6,10 +6,11 @@
  * Library MON port = 1303
  * */
 
-import java.io.IOException;
+import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -39,7 +40,6 @@ public class Delegate implements Runnable{
                 mySocket.receive(receiver);
                 Thread newThread = new Thread(new RequestHandler(library,mySocket,receiver));
                 newThread.start();
-
             }catch(IOException e){
                 System.out.println("Input/Output exception");
                 e.printStackTrace();
@@ -54,12 +54,25 @@ class RequestHandler implements Runnable {
     private DatagramSocket mySocket = null;
     private DatagramPacket receiver = null;
     private final Object lock;
+    private File logFile;
+    private PrintWriter logger;
 
     public RequestHandler(ServerObj myServer,DatagramSocket mySocket,DatagramPacket receiver){
         this.myServer = myServer;
         this.mySocket = mySocket;
         this.receiver = receiver;
         lock = new Object();
+        logFile = new File("/home/sarvesh/CORBALibrarySystem/src/Logs/log_" + myServer.library + ".log");
+        try{
+            if(!logFile.exists())
+                logFile.createNewFile();
+            logger = new PrintWriter(new BufferedWriter(new FileWriter(logFile)));
+        }catch (IOException io){
+            System.out.println("Error in creating log file.");
+            io.printStackTrace();
+        }
+        writeToLogFile(myServer.library + " Inter Server Started.");
+
     }
     /*format |    ServerName:RequestType:Argments     |
     ServerName = from which Server request came
@@ -83,6 +96,7 @@ class RequestHandler implements Runnable {
             case "borrowFromOther" :
                 if(request.length != 5){
                     reply = "Unsuccessful";
+                    writeToLogFile(request[1] + " : Request parameters are less");
                     break;
                 }
                 userID = request[2];
@@ -90,14 +104,18 @@ class RequestHandler implements Runnable {
                 numberOfDays = Integer.parseInt(request[4]);
                 if(!myServer.item.containsKey(itemID)){
                     reply = "Unsuccessful";
+                    writeToLogFile(request[1] + " : Item do not exist");
                     break;
                 }
                 Item requestedItem;
                 synchronized (lock) {requestedItem = myServer.item.get(itemID);}
                 if(requestedItem.getItemCount() == 0){
                     reply = "Unsuccessful";
+                    writeToLogFile(request[1] + " : Item count is 0");
+                    break;
                 }
                 User currentUser = new User(userID);
+                myServer.user.put(userID,currentUser);
                 HashMap<Item,Integer> entry;
                 requestedItem.setItemCount(requestedItem.getItemCount() - 1);
                 synchronized (lock) {myServer.item.remove(itemID);
@@ -105,6 +123,7 @@ class RequestHandler implements Runnable {
                 if (myServer.borrow.containsKey(currentUser)) {
                     if (myServer.borrow.get(currentUser).containsKey(requestedItem)) {
                         reply = "Unsuccessful";
+                        writeToLogFile(request[1] + " : Already borrowed");
                         break;
                     } else {
                         synchronized (lock) {entry = myServer.borrow.get(currentUser);
@@ -123,6 +142,7 @@ class RequestHandler implements Runnable {
             case "findAtOther" :
                 if(request.length != 3){
                     reply = "Unsuccessful";
+                    writeToLogFile(request[1] + " : Invalid parameters");
                     break;
                 }
                 itemName = request[2];
@@ -138,15 +158,25 @@ class RequestHandler implements Runnable {
             case "returnToOther" :
                 if(request.length != 4){
                     reply = "Unsuccessful";
+                    System.out.println(request);
+                    writeToLogFile(request[1] + " : Invalid parameters");
                     break;
                 }
                 userID = request[2];
                 itemID = request[3];
                 synchronized (lock) {currentUser = myServer.user.get(userID);}
                 Iterator<Map.Entry<Item,Integer>> value;
-                synchronized (lock) {value = myServer.borrow.get(currentUser).entrySet().iterator();}
+                synchronized (lock) {
+                    if(myServer.borrow.containsKey(currentUser)){
+                    value = myServer.borrow.get(currentUser).entrySet().iterator();
+                    }else{
+                        reply = "Unsuccessful";
+                        break;
+                    }
+                }
                 if(!value.hasNext()){
                     reply = "Unsuccessful";
+                    writeToLogFile(request[1] + " : Not borrowed any book.");
                     break;
                 }
                 boolean status = false;
@@ -155,10 +185,11 @@ class RequestHandler implements Runnable {
                     if(pair.getKey().getItemID().equals(itemID)){
                         synchronized (lock) {
                             myServer.borrow.get(currentUser).remove(pair.getKey());
-                            myServer.updateItemCount(itemID);
-                            myServer.automaticAssignmentOfBooks(itemID);
                             myServer.borrowedItemDays.remove(itemID);
+                            myServer.user.remove(userID);
                         }
+                        myServer.updateItemCount(itemID);
+                        myServer.automaticAssignmentOfBooks(itemID);
                         status = true;
                         break;
                     }
@@ -172,6 +203,7 @@ class RequestHandler implements Runnable {
             default:
                 reply = "Unsuccessful";
         }
+        writeToLogFile(request[1] + " " + reply);
         DatagramPacket sender = new DatagramPacket(reply.getBytes(), reply.length(), receiver.getAddress(), receiver.getPort());
         try {
             mySocket.send(sender); // send the response DatagramPacket object to the requester.
@@ -180,4 +212,17 @@ class RequestHandler implements Runnable {
             e.printStackTrace();
         }
     }
+
+    synchronized private void writeToLogFile(String message) {
+        try {
+            if (logger == null)
+                return;
+            // print the time and the message to log file
+            logger.println(Calendar.getInstance().getTime().toString() + " - " + message);
+            logger.flush();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
 }

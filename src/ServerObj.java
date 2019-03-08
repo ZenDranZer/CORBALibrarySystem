@@ -43,7 +43,7 @@ public class ServerObj extends ServerFeaturesPOA {
     protected final HashMap<User,HashMap<Item,Integer>> borrow;
     protected final HashMap<Item, HashMap<User,Integer>> waitingQueue;
     protected final HashMap<String,Integer> borrowedItemDays;
-    private String library;
+    protected String library;
     private Integer next_User_ID;
     private Integer next_Manager_ID;
     private File logFile;
@@ -64,7 +64,7 @@ public class ServerObj extends ServerFeaturesPOA {
         next_User_ID = 1003;
         next_Manager_ID = 1002;
         lock = new Object();
-        logFile = new File("/home/sarvesh/IdeaProjects/DistributedLibrarySystem/src/Logs/log_" + library + ".log");
+        logFile = new File("/home/sarvesh/CORBALibrarySystem/src/Logs/log_" + library + ".log");
         try{
             if(!logFile.exists())
                 logFile.createNewFile();
@@ -201,11 +201,13 @@ public class ServerObj extends ServerFeaturesPOA {
             while(value.hasNext()) {
                 Map.Entry<Item, Integer> pair = value.next();
                 if(pair.getKey().getItemID().equals(itemID)){
-                    synchronized (lock){borrow.get(currentUser).remove(pair.getKey());}
+                    synchronized (lock){
+                        borrow.get(currentUser).remove(pair.getKey());
+                        borrowedItemDays.remove(itemID);
+                    }
                     updateItemCount(itemID);
                     automaticAssignmentOfBooks(itemID);
                     message += " Successful";
-                    borrowedItemDays.remove(itemID);
                     writeToLogFile(message);
                     return message;
                 }
@@ -224,7 +226,7 @@ public class ServerObj extends ServerFeaturesPOA {
                 " User : " + userID +
                 " Item :" + itemID;
         if(!item.containsKey(itemID)){
-            reply += borrowFromOtherLibrary(userID,itemID,numberOfDays);
+            reply = borrowFromOtherLibrary(userID,itemID,numberOfDays);
             writeToLogFile(reply);
             return reply;
         }
@@ -232,6 +234,7 @@ public class ServerObj extends ServerFeaturesPOA {
         Item requestedItem;
         requestedItem = item.get(itemID);
         if(requestedItem.getItemCount() == 0){
+
             return "queue";
         }else {
             HashMap<Item,Integer> entry;
@@ -473,19 +476,19 @@ public class ServerObj extends ServerFeaturesPOA {
     @Override
     public String exchangeItem(String userID, String newItemID, String oldItemID) {
         User currentUser = user.get(userID);
-        String reply =  "Borrow Request : Server : " + library +
+        String reply =  "Exchange Request : Server : " + library +
                 " User : " + userID +
                 " old Item :" + oldItemID +
                 " New Item : " + newItemID +
                 " Status : ";
         String borrowReply,returnReply;
         /*First return the old item to particular library*/
+        int numberOfDays = borrowedItemDays.get(oldItemID);
         if(borrow.containsKey(currentUser)){
             returnReply = returnItem(userID,oldItemID);
-            if(returnReply.substring(returnReply.length()-11).equals("Successful")){
-                int numberOfDays = borrowedItemDays.get(newItemID);
+            if(returnReply.substring(returnReply.length()-10).equals("Successful")){
                 borrowReply = borrowItem(userID,newItemID,numberOfDays);
-                if(borrowReply.substring(returnReply.length()-11).equals("Successful")){
+                if(borrowReply.substring(borrowReply.length()-10).equals("Successful")){
                     reply += "Successful";
                 }else{
                     reply += "Unsuccessful\n"+
@@ -515,7 +518,7 @@ public class ServerObj extends ServerFeaturesPOA {
         String reply =  "Borrow Request : Server : " + library +
                 " User : " + userID +
                 " Item :" + itemID +
-                " Status : " ;
+                " Delegated Library : " + itemID.substring(0,3);
         try {
             DatagramSocket mySocket = new DatagramSocket();
             InetAddress host = InetAddress.getLocalHost();
@@ -531,7 +534,7 @@ public class ServerObj extends ServerFeaturesPOA {
                     serverDetails = ServerDetails.MCGILL;
                     break;
                 case "MON":
-                    serverDetails = ServerDetails.MCGILL;
+                    serverDetails = ServerDetails.MONTREAL;
                     break;
             }
             isValidBorrow = currentUser.getOutsourced()[serverDetails.getIndex()];
@@ -542,14 +545,34 @@ public class ServerObj extends ServerFeaturesPOA {
                 DatagramPacket receivedReply = new DatagramPacket(receive,receive.length);
                 mySocket.receive(receivedReply);
                 result = new String(receivedReply.getData()).trim();
+            }else{
+                reply += "Note : You have already borrowed from this library." +
+                        "Status : Unsuccessful";
             }
             if(result.equals("Successful")){
-                reply += result + " Delegated Library : " + serverDetails.getLibrary() ;
+                reply += "Status : " + result;
                 boolean[] isOutsourced;
                 synchronized (lock) {isOutsourced = currentUser.getOutsourced();}
                 isOutsourced[serverDetails.getIndex()] = true;
                 synchronized (lock) {currentUser.setOutsourced(isOutsourced);}
                 borrowedItemDays.put(itemID,numberOfDays);
+                Item curruntItem;
+                if(item.containsKey(itemID)){
+                    curruntItem = item.get(itemID);
+                    curruntItem.setItemCount(curruntItem.getItemCount()+1);
+                    item.remove(itemID);
+                }else{
+                    curruntItem = new Item(itemID,serverDetails.getLibrary(),1);
+                }
+                item.put(itemID,curruntItem);
+                if(borrow.containsKey(currentUser)){
+                borrow.get(currentUser).put(curruntItem,numberOfDays);
+                }else{
+                    HashMap<Item,Integer> borrowed = new HashMap<>();
+                    borrowed.put(curruntItem,numberOfDays);
+                    borrow.put(currentUser,borrowed);
+                }
+
             }else{
                 reply = "queue";
             }
@@ -622,6 +645,7 @@ public class ServerObj extends ServerFeaturesPOA {
 
     /**it simply returns the given item to the library where it belongs to.*/
     private String returnToOtherLibrary(String userID, String itemID){
+        User currentUser = user.get(userID);
         String reply ="";
         try{
             DatagramSocket mySocket = new DatagramSocket();
@@ -636,7 +660,7 @@ public class ServerObj extends ServerFeaturesPOA {
             if (itemID.substring(0,3).equals("MON")){
                 serverDetails = ServerDetails.MONTREAL;
             }
-            String request = library+":findAtOther:"+userID+":"+itemID;
+            String request = library+":returnToOther:"+userID+":"+itemID;
             DatagramPacket sendRequest = new DatagramPacket(request.getBytes(),request.length(),host,serverDetails.getPort());
             mySocket.send(sendRequest);
             byte[] receive = new byte[1024];
@@ -649,7 +673,17 @@ public class ServerObj extends ServerFeaturesPOA {
                         " Item :" + itemID +
                         " Delegated Library : " + serverDetails.getLibrary() +
                         " Status : Successful";
+                Item curruntItem;
+                curruntItem = item.get(itemID);
+                curruntItem.setItemCount(curruntItem.getItemCount()-1);
+                item.remove(itemID);
+                borrow.get(currentUser).remove(curruntItem);
+                boolean[] isOutsourced;
+                synchronized (lock) {isOutsourced = currentUser.getOutsourced();}
+                isOutsourced[serverDetails.getIndex()] = false;
+                synchronized (lock) {currentUser.setOutsourced(isOutsourced);}
                 borrowedItemDays.remove(itemID);
+
             }else{
                 reply =  "Return Request : Server : " + library +
                         " User : " + userID +

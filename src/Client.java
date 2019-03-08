@@ -40,7 +40,7 @@ public class Client implements Runnable {
             invalidName.printStackTrace();
         }
         sc = new BufferedReader(new InputStreamReader(System.in));
-        logFile = new File("/home/sarvesh/IdeaProjects/DistributedLibrarySystem/src/Logs/log_" + library + "_"+ clientID+ ".log");
+        logFile = new File("/home/sarvesh/CORBALibrarySystem/src/Logs/log_" + library + "_"+ clientID+ ".log");
         try{
             if(!logFile.exists())
                 logFile.createNewFile();
@@ -106,11 +106,12 @@ public class Client implements Runnable {
                         if(reply.equals("queue")){
                             System.out.println("Item is not available at all library, do wanna put yourself in a queue (Y/N) ? ");
                             String ch = sc.readLine();
-                            if (ch.charAt(0) == 'Y' || ch.charAt(0) == 'y')
+                            if (ch.charAt(0) == 'Y' || ch.charAt(0) == 'y'){
                                 reply = client.addToQueue(clientID,itemID,numberOfDays);
+                                writeToLogFile(reply);
+                                System.out.println(reply);
+                            }
                         }
-                        writeToLogFile(reply);
-                        System.out.println(reply);
                         op = 'Y';
                         break;
                     case '2':
