@@ -469,12 +469,26 @@ public class ServerObj extends ServerFeaturesPOA {
                 " old Item :" + oldItemID +
                 " New Item : " + newItemID +
                 " Status : ";
+        boolean libraryItemBorrow;
+            switch (newItemID.substring(0, 3)) {
+                case "CON":
+                    libraryItemBorrow = currentUser.getOutsourced()[0];
+                    break;
+                case "MCG":
+                    libraryItemBorrow = currentUser.getOutsourced()[1];
+                    break;
+                case "MON":
+                    libraryItemBorrow = currentUser.getOutsourced()[2];
+                    break;
+                default:
+                    libraryItemBorrow = true;
+            }
         String borrowReply,returnReply;
         int numberOfDays = borrowedItemDays.get(oldItemID);
         /*First check whether old item is borrowed.*/
         if(borrow.containsKey(currentUser)){
             /*Second check new item is available or not.*/
-            if(isItemAvailable(newItemID)) {
+            if(isItemAvailable(newItemID) && !libraryItemBorrow) {
                 /*Third return the old item to particular library*/
                 returnReply = returnItem(userID, oldItemID);
                 if (returnReply.substring(returnReply.length() - 10).equals("Successful")) {
