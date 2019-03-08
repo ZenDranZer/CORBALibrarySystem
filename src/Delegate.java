@@ -95,7 +95,6 @@ class RequestHandler implements Runnable {
             case "borrowFromOther" :
                 if(request.length != 5){
                     reply = "Unsuccessful";
-                    //writeToLogFile(request[1] + " : Request parameters are less");
                     break;
                 }
                 userID = request[2];
@@ -103,14 +102,12 @@ class RequestHandler implements Runnable {
                 numberOfDays = Integer.parseInt(request[4]);
                 if(!myServer.item.containsKey(itemID)){
                     reply = "Unsuccessful";
-                    //writeToLogFile(request[1] + " : Item do not exist");
                     break;
                 }
                 Item requestedItem;
                 synchronized (lock) {requestedItem = myServer.item.get(itemID);}
                 if(requestedItem.getItemCount() == 0){
                     reply = "Unsuccessful";
-                    //writeToLogFile(request[1] + " : Item count is 0");
                     break;
                 }
                 User currentUser = new User(userID);
@@ -120,7 +117,6 @@ class RequestHandler implements Runnable {
                 if (myServer.borrow.containsKey(currentUser)) {
                     if (myServer.borrow.get(currentUser).containsKey(requestedItem)) {
                         reply = "Unsuccessful";
-                        //writeToLogFile(request[1] + " : Already borrowed");
                         break;
                     } else {
                         synchronized (lock) {entry = myServer.borrow.get(currentUser);
@@ -139,7 +135,6 @@ class RequestHandler implements Runnable {
             case "findAtOther" :
                 if(request.length != 3){
                     reply = "Unsuccessful";
-                    //writeToLogFile(request[1] + " : Invalid parameters");
                     break;
                 }
                 itemName = request[2];
@@ -155,8 +150,6 @@ class RequestHandler implements Runnable {
             case "returnToOther" :
                 if(request.length != 4){
                     reply = "Unsuccessful";
-                    System.out.println(request);
-                    //writeToLogFile(request[1] + " : Invalid parameters");
                     break;
                 }
                 userID = request[2];
@@ -173,7 +166,6 @@ class RequestHandler implements Runnable {
                 }
                 if(!value.hasNext()){
                     reply = "Unsuccessful";
-                    //writeToLogFile(request[1] + " : Not borrowed any book.");
                     break;
                 }
                 boolean status = false;
@@ -196,6 +188,22 @@ class RequestHandler implements Runnable {
                 }else{
                     reply = "Unsuccessful";
                 }
+                break;
+
+            case "isAvailable":
+                if(request.length != 3){
+                    reply = "Unsuccessful";
+                    break;
+                }
+                itemID = request[2];
+                if(myServer.item.containsKey(itemID)){
+                    Item currentItem = myServer.item.get(itemID);
+                    if(currentItem.getItemCount() >= 1)
+                        reply = "true";
+                    else
+                        reply = "false";
+                }else
+                    reply = "false";
                 break;
             default:
                 reply = "Unsuccessful";

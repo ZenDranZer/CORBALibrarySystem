@@ -421,6 +421,7 @@ public class ServerObj extends ServerFeaturesPOA {
         return "Add to queue : User ID : "+ userID + " Item ID : " + itemID;
     }
 
+    /**validate the client*/
     @Override
     public String validateClient(String clientID) {
         User currentUser;
@@ -457,6 +458,9 @@ public class ServerObj extends ServerFeaturesPOA {
         return "false";
     }
 
+    /**used by the user to exchange an item with another, first we return the item,
+     * if successful, we attempt to borrow new item, if both operations are successful,
+     * the whole operation is successful otherwise not.*/
     @Override
     public String exchangeItem(String userID, String newItemID, String oldItemID) {
         User currentUser = user.get(userID);
@@ -466,21 +470,29 @@ public class ServerObj extends ServerFeaturesPOA {
                 " New Item : " + newItemID +
                 " Status : ";
         String borrowReply,returnReply;
-        /*First return the old item to particular library*/
         int numberOfDays = borrowedItemDays.get(oldItemID);
+        /*First check whether old item is borrowed.*/
         if(borrow.containsKey(currentUser)){
-            returnReply = returnItem(userID,oldItemID);
-            if(returnReply.substring(returnReply.length()-10).equals("Successful")){
-                borrowReply = borrowItem(userID,newItemID,numberOfDays);
-                if(borrowReply.substring(borrowReply.length()-10).equals("Successful")){
-                    reply += "Successful";
-                }else{
-                    reply += "Unsuccessful\n"+
-                            "Note : Error in borrowing the new book.";
+            /*Second check new item is available or not.*/
+            if(isItemAvailable(newItemID)) {
+                /*Third return the old item to particular library*/
+                returnReply = returnItem(userID, oldItemID);
+                if (returnReply.substring(returnReply.length() - 10).equals("Successful")) {
+                    /*Forth borrow new item.*/
+                    borrowReply = borrowItem(userID, newItemID, numberOfDays);
+                    if (borrowReply.substring(borrowReply.length() - 10).equals("Successful")) {
+                        reply += "Successful";
+                    } else {
+                        reply += "Unsuccessful\n" +
+                                "Note : Error in borrowing the new book.";
+                    }
+                } else {
+                    reply += "Unsuccessful\n" +
+                            "Note : Error in returning the old book.";
                 }
             }else{
                 reply += "Unsuccessful\n"+
-                        "Note : Error in returning the old book.";
+                        "Note : mentioned new item not available.";
             }
         }else{
             reply += "Unsuccessful\n"+
@@ -722,6 +734,45 @@ public class ServerObj extends ServerFeaturesPOA {
             logger.flush();
         } catch (Exception ex) {
             ex.printStackTrace();
+        }
+    }
+
+    /***/
+    private boolean isItemAvailable(String itemID){
+        if(itemID.substring(0,3).equals(library)){
+            if(item.containsKey(itemID)){
+                Item currentItem = item.get(itemID);
+                return currentItem.getItemCount() >= 1;
+            }else
+                return false;
+        }else{
+            try{
+                DatagramSocket mySocket = new DatagramSocket();
+                InetAddress host = InetAddress.getLocalHost();
+                ServerDetails serverDetails = null;
+                if (itemID.substring(0,3).equals("CON")){
+                    serverDetails = ServerDetails.CONCORDIA;
+                }
+                if (itemID.substring(0,3).equals("MCG")){
+                    serverDetails = ServerDetails.MCGILL;
+                }
+                if (itemID.substring(0,3).equals("MON")){
+                    serverDetails = ServerDetails.MONTREAL;
+                }
+                String request = library+":isAvailable:"+itemID;
+                DatagramPacket sendRequest = new DatagramPacket(request.getBytes(),request.length(),host,serverDetails.getPort());
+                mySocket.send(sendRequest);
+                byte[] receive = new byte[1024];
+                DatagramPacket receivedReply = new DatagramPacket(receive,receive.length);
+                mySocket.receive(receivedReply);
+                String message = new String(receivedReply.getData()).trim();
+                return message.equals("true");
+            } catch (IOException e) {
+                writeToLogFile("IO Exception");
+                System.out.println("IO Exception.");
+                e.printStackTrace();
+                return false;
+            }
         }
     }
 
